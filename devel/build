@@ -1,0 +1,40 @@
+#!/bin/bash
+set -euo pipefail
+shopt -s extglob
+
+source "$(dirname "$0")/_common"
+cd "$repo"
+
+main() {
+    # First things first: set PATH early so everything that follows has the dev
+    # env available.
+    export PATH="$env/bin:$PATH"
+
+    # Set CONDA_SUBDIR unless it's already set.  This helps macOS users on
+    # arm64 chips use and produce osx-64 Conda packages instead of osx-arm64
+    # packages (which we don't yet support).
+    CONDA_SUBDIR="${CONDA_SUBDIR:-$(./devel/conda-subdir)}"
+    export CONDA_SUBDIR
+
+    clean
+    build recipes/nextclade2
+}
+
+clean() {
+    log "Removing $repo/build"
+    rm -rf ./build
+}
+
+build() {
+    local recipe_dir="$1"
+    shift
+
+    log "Building $repo/$recipe_dir into $repo/build/$recipe_dir"
+
+    # Boa's configuration framework is not quite fully-baked: it's only minimally
+    # configurable with env vars and reads only ~/.condarc, no other RC files.  Lie
+    # about HOME so we can configure channels properly for the build.
+    HOME="$repo" boa build --pkg-format 2 --croot "./build/$recipe_dir" "$recipe_dir" "$@"
+}
+
+main "$@"

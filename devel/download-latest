@@ -1,0 +1,18 @@
+#!/bin/bash
+set -euo pipefail
+
+source "$(dirname "$0")/_common"
+export PATH="$env/bin:$PATH"
+
+CONDA_SUBDIR="${CONDA_SUBDIR:-$("$repo"/devel/conda-subdir)}"
+export CONDA_SUBDIR
+
+wget "$(
+    curl -fsSL https://api.anaconda.org/package/nextstrain/nextstrain-base/files | jq -r '
+          map(select(.labels|index("main")))
+        | map(select(.attrs.subdir == env.CONDA_SUBDIR))
+        | max_by([.version, .attrs.build_number])
+        | .download_url
+        | if startswith("//") then "https:\(.)" else . end
+    '
+)"

@@ -1,0 +1,65 @@
+#!/bin/bash
+set -euo pipefail
+
+source "$(dirname "$0")/_common"
+
+main() {
+    log "Setting up $env"
+    remove
+    create
+}
+
+remove() {
+    if [[ -e "$env" ]]; then
+        log "Removing existing env"
+        rm -rf "$env"
+    fi
+}
+
+create() {
+    local -a pkgs=(
+        "anaconda-client>=1.12.0"
+        "boa>=0.16.0"
+
+        # for manipulating recipe.yaml with jq
+        yq
+
+        # for extracting files from .conda packages
+        tar
+        unzip
+        zstd
+
+        # to get gnu `date` on macOS
+        coreutils
+
+        # for diffing dependencies in CI
+        csv-diff
+        curl
+        wget
+
+        # Temporary pin until boa fixes dependency upstream
+        # <https://github.com/mamba-org/boa/issues/388>
+        "conda-build<3.28.0"
+    )
+
+    log "Creating new env with packages: ${pkgs[*]}"
+    conda-ish create \
+        --yes \
+        --prefix "$env" \
+        --override-channels \
+        --channel conda-forge \
+        "${pkgs[@]}"
+}
+
+conda-ish() {
+    for condaish in micromamba mamba conda; do
+        if type -a "$condaish" >/dev/null 2>&1; then
+            "$condaish" "$@"
+            return $?
+        fi
+    done
+    echo "No conda-ish program (micromamba, mamba, conda) found" >&2
+    return 1
+}
+
+main "$@"

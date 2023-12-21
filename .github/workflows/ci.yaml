@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - README.md
+
+  pull_request:
+    paths-ignore:
+      - README.md
+
+  workflow_dispatch:
+
+jobs:
+  generate-version:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - id: set
+        run: |
+          echo "version=$(./devel/generate-version)" | tee -a "$GITHUB_OUTPUT"
+          echo "label=$(./devel/label-for-ref "$GITHUB_REF")" | tee -a "$GITHUB_OUTPUT"
+    outputs:
+      version: ${{ steps.set.outputs.version }}
+      label: ${{ steps.set.outputs.label }}
+
+  build-and-test:
+    needs: generate-version
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-22.04
+          - macos-12
+
+    name: build and test (os=${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install Micromamba
+        run: |
+          curl -fsSL --proto 'https=' https://micro.mamba.pm/install.sh | bash
+          echo ~/.local/bin >> "$GITHUB_PATH"
+
+      - uses: actions/checkout@v3
+
+      - run: ./devel/setup
+      - run: ./devel/build
+        env:
+          VERSION: ${{ needs.generate-version.outputs.version }}
+
+      - if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-outputs-${{ matrix.os }}
+          path: |
+            build/
+
+      - if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: packages
+          path: build/locked/*/nextstrain-base-*.conda
+
+      - name: Test install of nextstrain-base
+        run: |
+          micromamba create                 \
+            --yes                           \
+            --prefix ./test-env             \
+            --strict-channel-priority       \
+            --override-channels             \
+            --channel ./build/locked        \
+            --channel conda-forge           \
+            --channel bioconda              \
+            nextstrain-base
+
+      - name: Generate summary
+        run: |
+          ./devel/download-latest
+          ./devel/diff-pkgs nextstrain-base-*.conda build/locked/*/nextstrain-base-*.conda \
+            > "$GITHUB_STEP_SUMMARY"
+
+  release:
+    needs:
+      - generate-version
+      - build-and-test
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Install Micromamba
+        run: |
+          curl -fsSL --proto 'https=' https://micro.mamba.pm/install.sh | bash
+          echo ~/.local/bin >> "$GITHUB_PATH"
+
+      - uses: actions/checkout@v3
+      - uses: actions/download-artifact@v3
+        with:
+          name: packages
+          path: build/locked/
+
+      - run: ./devel/setup
+
+      - run: ./devel/upload
+        env:
+          ANACONDA_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
+          LABEL: ${{ needs.generate-version.outputs.label }}
+
+      - name: Generate summary
+        run: |
+          # Replace ${x} in Markdown with value of environment variable "x".
+          perl -pe 's/\$\{(.+?)\}/$ENV{$1}/ge' \
+            < .github/workflows/ci.release.md \
+            > "$GITHUB_STEP_SUMMARY"
+        env:
+          VERSION: ${{ needs.generate-version.outputs.version }}
+          LABEL: ${{ needs.generate-version.outputs.label }}

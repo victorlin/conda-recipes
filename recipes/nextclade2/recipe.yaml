@@ -1,0 +1,26 @@
+context:
+  name: nextclade2
+  version: 2.14.0
+
+package:
+  name: "{{ name }}"
+  version: "{{ version }}"
+
+source:
+  - sel(linux64):
+      url: 'https://github.com/nextstrain/nextclade/releases/download/{{ version }}/nextclade-x86_64-unknown-linux-gnu'
+  - sel(osx and x86_64):
+      url: 'https://github.com/nextstrain/nextclade/releases/download/{{ version }}/nextclade-x86_64-apple-darwin'
+  - sel(arm64):
+      url: 'https://github.com/nextstrain/nextclade/releases/download/{{ version }}/nextclade-aarch64-apple-darwin'
+
+build:
+  number: 0
+
+about:
+  home: https://github.com/nextstrain/nextclade
+  license: MIT
+  license_family: MIT
+  summary: "Viral genome alignment, mutation calling, clade assignment, quality checks and phylogenetic placement"
+  doc_url: https://docs.nextstrain.org/projects/nextclade/en/stable/
+  dev_url: https://github.com/nextstrain/nextclade
